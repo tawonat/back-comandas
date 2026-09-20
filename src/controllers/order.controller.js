@@ -60,6 +60,10 @@ exports.updateStatus = async (req, res) => {
 exports.updatePayment = async (req, res) => {
   const order = await OrderModel.updatePayment(Number(req.params.id), req.body);
   if (!order) throw createError(404, 'Pedido não encontrado');
+
+  socket.emitPaymentUpdated(order);
+  socket.emitOrderStatus(order);
+
   res.json({ success: true, data: order });
 };
 
