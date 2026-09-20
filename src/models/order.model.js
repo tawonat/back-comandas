@@ -36,7 +36,32 @@ class OrderModel {
       ),
     ]);
 
-    return { data: rows, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
+    const orderIds = rows.map((order) => order.id);
+    let itemsByOrder = {};
+
+    if (orderIds.length) {
+      const { rows: itemsRows } = await query(
+        `SELECT oi.order_id, oi.product_id, oi.quantity, oi.unit_price, oi.subtotal, oi.notes,
+                p.name AS product_name
+           FROM order_items oi
+           JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id IN (${orderIds.map(() => '?').join(',')})`,
+        orderIds
+      );
+
+      itemsByOrder = itemsRows.reduce((acc, item) => {
+        acc[item.order_id] ??= [];
+        acc[item.order_id].push(item);
+        return acc;
+      }, {});
+    }
+
+    const data = rows.map((order) => ({
+      ...order,
+      items: itemsByOrder[order.id] || [],
+    }));
+
+    return { data, meta: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
 
   static async findById(id) {
@@ -141,10 +166,48 @@ class OrderModel {
   }
 
   static async updatePayment(id, { payment_method, payment_status }) {
+    const currentOrder = await this.findById(id);
+    if (!currentOrder) return null;
+
     await query(
       'UPDATE orders SET payment_method = ?, payment_status = ? WHERE id = ?',
       [payment_method, payment_status, id]
     );
+
+    const updatedOrder = await this.findById(id);
+
+    if (updatedOrder && updatedOrder.session_id && payment_status === 'paid') {
+      const { rows: pendingRows } = await query(
+        `SELECT COUNT(*) AS total
+           FROM orders
+          WHERE session_id = ?
+            AND status != 'cancelled'
+            AND payment_status != 'paid'`,
+        [updatedOrder.session_id]
+      );
+
+      if (Number(pendingRows[0].total) === 0) {
+        const { rows: sessionRows } = await query(
+          'SELECT table_id FROM table_sessions WHERE id = ? LIMIT 1',
+          [updatedOrder.session_id]
+        );
+
+        if (sessionRows[0]) {
+          await query(
+            `UPDATE table_sessions
+                SET status = 'closed', closed_at = NOW()
+              WHERE id = ?`,
+            [updatedOrder.session_id]
+          );
+
+          await query(
+            'UPDATE tables SET status = ' + "'free'" + ' WHERE id = ?',
+            [sessionRows[0].table_id]
+          );
+        }
+      }
+    }
+
     return this.findById(id);
   }
 

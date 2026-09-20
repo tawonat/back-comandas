@@ -4,6 +4,7 @@ require('dotenv').config();
 require('express-async-errors');
 
 const express      = require('express');
+const cors         = require('cors');
 const helmet       = require('helmet');
 const morgan       = require('morgan');
 const createError  = require('http-errors');
@@ -14,6 +15,13 @@ const tableRoutes   = require('./routes/table.routes');
 const errorHandler  = require('./middlewares/errorHandler');
 
 const app = express();
+
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+}));
+app.options('*', cors());
 
 app.use(helmet());
 app.use(express.json());

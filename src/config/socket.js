@@ -37,14 +37,24 @@ function emitNewOrder(order) {
 
 // Emite atualização de status pra mesa
 function emitOrderStatus(order) {
-  getIO().to(`table_${order.table_number}`).emit('order_status', {
-    order_id:     order.id,
-    order_number: order.order_number,
-    status:       order.status,
-    items:        order.items,
-  });
+  if (order.table_number) {
+    getIO().to(`table_${order.table_number}`).emit('order_status', {
+      order_id:     order.id,
+      order_number: order.order_number,
+      status:       order.status,
+      items:        order.items,
+    });
+  }
+
   // Também avisa a cozinha
   getIO().to('kitchen').emit('order_updated', order);
+}
+
+function emitPaymentUpdated(order) {
+  getIO().to('kitchen').emit('payment_updated', order);
+  if (order.table_number) {
+    getIO().to(`table_${order.table_number}`).emit('payment_updated', order);
+  }
 }
 
 // Emite quando a conta é fechada
@@ -52,4 +62,4 @@ function emitTableCheckout(tableNumber, bill) {
   getIO().to(`table_${tableNumber}`).emit('checkout', bill);
 }
 
-module.exports = { init, getIO, emitNewOrder, emitOrderStatus, emitTableCheckout };
+module.exports = { init, getIO, emitNewOrder, emitOrderStatus, emitPaymentUpdated, emitTableCheckout };
